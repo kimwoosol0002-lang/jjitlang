@@ -22,15 +22,15 @@
 ## 설치 및 실행
 
 ```bash
-cd 찢랭/py
+cd py
 pip install .
-python -m jjitlang 찢랭/examples/hello.jjit
+python -m jjitlang examples/hello.jjit
 ```
 
 설치 없이 바로 실행:
 
 ```bash
-python -m jjitlang.interpreter 찢랭/examples/hello.jjit
+python -m jjitlang.interpreter examples/hello.jjit
 ```
 
 ---
@@ -156,7 +156,7 @@ python -m jjitlang.interpreter 찢랭/examples/hello.jjit
 ## OJ 채점기
 
 찢랭은 OJ(Online Judge) 채점기에서 `jjit` 언어로 사용할 수 있다.
-채점기는 `찢랭/py/jjitlang/` 인터프리터를 샌드박스 내에서 직접 실행한다.
+채점기는 `py/jjitlang/` 인터프리터를 샌드박스 내에서 직접 실행한다.
 
 ### OJ 서버 업데이트
 
@@ -164,6 +164,31 @@ python -m jjitlang.interpreter 찢랭/examples/hello.jjit
 # 최신 찢랭으로 OJ 업데이트
 cd oj채점
 bash scripts/update_jjit.sh
+```
+
+---
+
+## 프로젝트 구조
+
+```
+├── README.md          # 언어 문서
+├── LICENSE            # AGPL-3.0
+├── .gitignore
+├── examples/          # 예제 파일 (.jjit)
+│   ├── abplus.jjit
+│   ├── arithmetic.jjit
+│   ├── comparison.jjit
+│   ├── countdown.jjit
+│   ├── fizzbuzz.jjit
+│   ├── hello.jjit
+│   ├── ifelse.jjit
+│   └── input.jjit
+└── py/
+    ├── pyproject.toml
+    └── jjitlang/
+        ├── __init__.py
+        ├── __main__.py
+        └── interpreter.py
 ```
 
 ---
