@@ -11,9 +11,6 @@ JJITLANG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'py
 INTERPRETER = os.path.join(JJITLANG_DIR, 'jjitlang', 'interpreter.py')
 PORT = 8080
 
-_START = '야, 이 씨발련아'
-_END = '니 친정 엄마, 씹구멍 찢으면 좋겠니'
-
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -34,16 +31,8 @@ class Handler(BaseHTTPRequestHandler):
             code = body.get('code', '')
             stdin_data = body.get('stdin', '')
 
-            stripped = code.strip()
-            if not stripped.startswith(_START):
-                self._respond({'stdout': '', 'stderr': '찢랭 코드는 "' + _START + '"로 시작해야 합니다', 'returncode': -1})
-                return
-            if not stripped.endswith(_END):
-                self._respond({'stdout': '', 'stderr': '찢랭 코드는 "' + _END + '"로 끝나야 합니다', 'returncode': -1})
-                return
-
             tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.jjit', delete=False, encoding='utf-8')
-            tmp.write(stripped)
+            tmp.write(code.strip())
             tmp.close()
 
             try:

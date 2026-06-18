@@ -109,27 +109,9 @@ function updateCursorPos() {
   cursorPos.textContent = `${line}:${col}`;
 }
 
-const _START = '야, 이 씨발련아';
-const _END = '니 친정 엄마, 씹구멍 찢으면 좋겠니';
-
 async function run() {
   const code = editor.value.trim();
   if (!code) return;
-
-  if (!code.startsWith(_START)) {
-    output.textContent = '찢랭 코드는 "' + _START + '"로 시작해야 합니다';
-    output.className = 'error';
-    statusLabel.textContent = '오류';
-    statusLabel.className = 'status-inner error';
-    return;
-  }
-  if (!code.endsWith(_END)) {
-    output.textContent = '찢랭 코드는 "' + _END + '"로 끝나야 합니다';
-    output.className = 'error';
-    statusLabel.textContent = '오류';
-    statusLabel.className = 'status-inner error';
-    return;
-  }
 
   statusLabel.textContent = '실행 중...';
   statusLabel.className = 'status-inner';

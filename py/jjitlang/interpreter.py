@@ -109,7 +109,7 @@ class Interpreter:
                     matched = True
                     break
             if not matched:
-                i += 1
+                raise InterpreterError(f'알 수 없는 토근: {text[i]} (위치 {i})')
         return tokens
 
     def eval_val(self, raw):
