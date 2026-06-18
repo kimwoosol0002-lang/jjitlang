@@ -1,13 +1,13 @@
-# 찢랭 Hello World - prints ASCII codes of "Hello"
+# 찢랭 Hello World - prints "Hello"
 야, 이 씨발련아
 형수, 새끼, 1.
-형수, 새끼, 2.
-형수, 새끼, 3.
-형수, 새끼, 4.
-형수, 새끼, 5.
 1, 찢, 72.
-2, 찢, 101.
-3, 찢, 108.
-4, 찢, 111.
-# Note: 찢랭 has no native print yet (prints var dump on exit)
-니 친정 엄마, 씹구멍 찢으면 좋겠니?
+1, 메롱.
+1, 찢, 101.
+1, 메롱.
+1, 찢, 108.
+1, 메롱.
+1, 메롱.
+1, 찢, 111.
+1, 메롱.
+니 친정 엄마, 씹구멍 찢으면 좋겠니

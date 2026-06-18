@@ -16,6 +16,14 @@ _KEYWORDS = {
     '개새끼': 'FREE',
     '칼로 쑤신다': 'INC',
     '이 인간 쓰.레.기.야': 'PANIC',
+    '불지른다': 'PRINT',
+    '메롱': 'PRINTCHAR',
+    '드럼통': 'ADD',
+    '죽일': 'SUB',
+    '패륜아': 'MUL',
+    '도련님': 'DIV',
+    '또라이': 'MOD',
+    '공작금': 'CMP',
 }
 
 _START = '야, 이 씨발련아'
@@ -41,6 +49,7 @@ def is_comment(stripped):
 class Interpreter:
     def __init__(self):
         self.vars = {}
+        self._input_queue = None
 
     def get_indent(self, line):
         return len(line) - len(line.lstrip())
@@ -196,8 +205,12 @@ class Interpreter:
                         if not nstripped or is_comment(nstripped):
                             i += 1
                             continue
-                        if nindent <= indent:
+                        if nindent < indent:
                             break
+                        if nindent > indent:
+                            body.append(lines[i])
+                            i += 1
+                            continue
                         if nstripped == '병신':
                             has_else = True
                             i += 1
@@ -271,6 +284,37 @@ class Interpreter:
         for n in nums:
             self.vars[str(n.value)] = 0
 
+    def _eval_assign_expr(self, tokens):
+        if len(tokens) == 3:
+            l_t, op_t, r_t = tokens
+            if l_t.type == 'NUMBER' and op_t.type == 'KEYWORD' and r_t.type == 'NUMBER':
+                if op_t.value in ('드럼통', '죽일', '패륜아', '도련님', '또라이'):
+                    lv = self.eval_val(str(l_t.value))
+                    rv = self.eval_val(str(r_t.value))
+                    if op_t.value == '드럼통': return lv + rv
+                    if op_t.value == '죽일': return lv - rv
+                    if op_t.value == '패륜아': return lv * rv
+                    if op_t.value == '도련님':
+                        if rv == 0: raise InterpreterError('0으로 나누기')
+                        return lv // rv
+                    if op_t.value == '또라이':
+                        if rv == 0: raise InterpreterError('0으로 나머지 연산')
+                        return lv % rv
+        if len(tokens) == 4:
+            l_t, op_t, cmp_t, r_t = tokens
+            if (l_t.type == 'NUMBER' and op_t.type == 'KEYWORD' and op_t.value == '공작금'
+                and cmp_t.type == 'OPERATOR' and r_t.type == 'NUMBER'):
+                lv = self.eval_val(str(l_t.value))
+                rv = self.eval_val(str(r_t.value))
+                c = cmp_t.value
+                if c == '>': return 1 if lv > rv else 0
+                if c == '<': return 1 if lv < rv else 0
+                if c == '>=': return 1 if lv >= rv else 0
+                if c == '<=': return 1 if lv <= rv else 0
+                if c == '==': return 1 if lv == rv else 0
+                if c == '!=': return 1 if lv != rv else 0
+        return None
+
     def _op(self, tokens):
         nums = [t for t in tokens if t.type == 'NUMBER']
         if not nums:
@@ -287,6 +331,10 @@ class Interpreter:
             rest = [t for t in tokens[1:] if t.type not in ('COMMA', 'DOT') and not (t.type == 'KEYWORD' and t.value == '찢')]
             if not rest:
                 return
+            val = self._eval_assign_expr(rest)
+            if val is not None:
+                self.vars[var_name] = val
+                return
             rt = rest[0]
             if rt.type == 'NUMBER':
                 self.vars[var_name] = rt.value
@@ -296,9 +344,17 @@ class Interpreter:
                 elif rt.value == '시발련':
                     self.vars[var_name] = 0
                 elif rt.value == '놈':
-                    try:
-                        self.vars[var_name] = int(input())
-                    except (EOFError, ValueError):
+                    if self._input_queue is None:
+                        self._input_queue = []
+                        for line in sys.stdin:
+                            for token in line.split():
+                                self._input_queue.append(token)
+                    if self._input_queue:
+                        try:
+                            self.vars[var_name] = int(self._input_queue.pop(0))
+                        except ValueError:
+                            self.vars[var_name] = 0
+                    else:
                         self.vars[var_name] = 0
 
         elif kw == '칼로 쑤신다':
@@ -306,6 +362,16 @@ class Interpreter:
                 raise InterpreterError(f'변수 {var_name} 선언 안됨')
             self.vars[var_name] += 1
             print(self.vars[var_name])
+
+        elif kw == '불지른다':
+            if var_name not in self.vars:
+                raise InterpreterError(f'변수 {var_name} 선언 안됨')
+            print(self.vars[var_name])
+
+        elif kw == '메롱':
+            if var_name not in self.vars:
+                raise InterpreterError(f'변수 {var_name} 선언 안됨')
+            print(chr(self.vars[var_name] % 256), end='', flush=True)
 
         elif kw == '시팔련':
             if var_name not in self.vars:
