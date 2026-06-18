@@ -1,0 +1,7 @@
+{
+  "name": "safe-fuckit",
+  "version": "0.1.0",
+  "description": "Decorator and context manager for isolating exceptions and rolling back simple state.",
+  "main": "SafeFuckIt.js",
+  "license": "MIT"
+}

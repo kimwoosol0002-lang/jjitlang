@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>으에 스피키 네르지마세요</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #ffffff;
+            overflow: hidden;
+            user-select: none;
+            touch-action: none;
+        }
+        #canvas-container { position: relative; background: #ffffff; }
+        canvas { display: block; cursor: grab; }
+        canvas:active { cursor: grabbing; }
+    </style>
+    <link rel="icon" href="character.webp" type="image/webp">
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="glCanvas"></canvas>
+    </div>
+    <!-- distortion always enabled -->
+
+    <script id="vs" type="x-shader/x-vertex">
+        attribute vec2 position;
+        varying vec2 vUv;
+        void main() {
+            vUv = position * 0.5 + 0.5;
+            vUv.y = 1.0 - vUv.y;
+            gl_Position = vec4(position, 0.0, 1.0);
+        }
+    </script>
+
+    <script id="fs" type="x-shader/x-fragment">
+        precision highp float;
+        varying vec2 vUv;
+        uniform sampler2D uTexture;
+        uniform vec2 uMouse;
+        uniform vec2 uDragStart;
+        uniform float uStrength;
+        uniform float uAspect;
+        uniform float uTime;
+        uniform float uVelocity;
+        uniform vec2 uTexSize;
+        void main() {
+            // Basic deformation using drag anchor + mouse, scaled by aspect and strength
+            vec2 uv = vUv;
+            vec2 delta = (uv - uDragStart);
+            delta.x *= uAspect;
+            float dist = length(delta);
+
+            float edgeAnchor = pow(vUv.x * (1.0 - vUv.x) * vUv.y * (1.0 - vUv.y) * 16.0, 0.8);
+            float influence = exp(-dist * 6.5) * edgeAnchor;
+            vec2 pull = (uMouse - uDragStart) * influence * uStrength;
+            uv -= pull;
+
+            // Small elastic shiver when strength is low
+            if (uStrength < 0.2) {
+                uv += sin(uTime * 28.0 + uv.y * 35.0) * uVelocity * 0.003 * edgeAnchor;
+            }
+
+            uv = clamp(uv, 0.001, 0.999);
+            vec4 color = texture2D(uTexture, uv);
+
+            // If sampled texel is transparent or missing, fill by sampling neighbors (3x3 box blur)
+            if (color.a < 0.05) {
+                vec2 safeSize = max(uTexSize, vec2(1.0, 1.0));
+                vec2 texel = 1.0 / safeSize;
+                vec4 sum = vec4(0.0);
+                float count = 0.0;
+                for (int y = -1; y <= 1; ++y) {
+                    for (int x = -1; x <= 1; ++x) {
+                        vec2 o = uv + vec2(float(x) * texel.x, float(y) * texel.y);
+                        o = clamp(o, 0.001, 0.999);
+                        vec4 s = texture2D(uTexture, o);
+                        if (s.a > 0.01) { sum += s; count += 1.0; }
+                    }
+                }
+                if (count > 0.0) color = sum / count;
+            }
+
+            float pullDist = length(pull);
+            float shading = 1.0 - (pullDist * 2.0);
+            color.rgb *= mix(1.0, shading, 0.25);
+
+            float halo = smoothstep(0.0, 0.08, dist) * uStrength * 0.12;
+            color.rgb += vec3(halo);
+
+            // Edge fade: slightly dim edges so image remains visible
+            float fadeX = smoothstep(0.0, 0.05, vUv.x) * (1.0 - smoothstep(0.95, 1.0, vUv.x));
+            float fadeY = smoothstep(0.0, 0.05, vUv.y) * (1.0 - smoothstep(0.95, 1.0, vUv.y));
+            float borderFade = fadeX * fadeY;
+            float edgeDark = mix(0.7, 1.0, borderFade);
+            color.rgb *= edgeDark;
+            gl_FragColor = color;
+        }
+    </script>
+
+    <script>
+        const canvas = document.getElementById('glCanvas');
+        const gl = canvas.getContext('webgl');
+        function dbg(msg) { /* no-op */ }
+        if (!gl) {
+            dbg('WebGL not available');
+            // Fallback: show the image element directly
+            const container = document.getElementById('canvas-container');
+            const fallback = document.createElement('img');
+            fallback.src = 'character.webp';
+            fallback.style.maxWidth = '90vw';
+            fallback.style.maxHeight = '90vh';
+            container.appendChild(fallback);
+        }
+
+        const dragSound = new Audio('v_eh.wav');
+        const eeuSound = new Audio('v_eeu.wav');
+        const headSound = new Audio('v_head.wav');
+        const nerzySound = new Audio('v_nerzy.WAV');
+
+        // Fallback overlay image shown until WebGL texture upload succeeds
+        const containerEl = document.getElementById('canvas-container');
+        const fallbackOverlay = document.createElement('img');
+        fallbackOverlay.src = 'character.webp';
+        fallbackOverlay.style.position = 'absolute';
+        fallbackOverlay.style.left = '0';
+        fallbackOverlay.style.top = '0';
+        fallbackOverlay.style.width = '100%';
+        fallbackOverlay.style.height = '100%';
+        fallbackOverlay.style.objectFit = 'contain';
+        fallbackOverlay.style.pointerEvents = 'none';
+        fallbackOverlay.style.zIndex = '10';
+        containerEl.appendChild(fallbackOverlay);
+
+        let currentSequenceId = 0;
+        function stopAllAudio() { currentSequenceId++; [dragSound, eeuSound, headSound, nerzySound].forEach(a=>{a.pause(); a.currentTime=0; a.onended=null;}); }
+        function playDragSound(){ stopAllAudio(); dragSound.play().catch(()=>{}); }
+        function playReleaseSequence(){ stopAllAudio(); const seqId=currentSequenceId; if(Math.random()<0.5){ nerzySound.play().catch(()=>{}); } else { eeuSound.onended=()=>{ if(seqId!==currentSequenceId) return; headSound.play().catch(()=>{}); }; eeuSound.play().catch(()=>{ headSound.play().catch(()=>{}); }); } }
+
+        let program, texture, isDragging=false;
+        let mousePos = {x:0.5,y:0.5}, dragStartPos = {x:0.5,y:0.5};
+        let strength=0, targetStrength=0, velocity=0;
+        const springK=0.55, damping=0.68;
+        let startTime = Date.now();
+
+        const img = new Image();
+        img.src = 'character.webp';
+
+        function createShader(source, type) {
+            const s = gl.createShader(type);
+            gl.shaderSource(s, source);
+            gl.compileShader(s);
+            if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+            return s;
+        }
+
+        // Hole-filling helper available in all branches
+        function fillHoles(data, w, h, iterations) {
+            const arr = data.data;
+            for (let it=0; it<iterations; ++it) {
+                const copy = new Uint8ClampedArray(arr);
+                for (let y=0; y<h; ++y) {
+                    for (let x=0; x<w; ++x) {
+                        const i = (y*w + x) * 4;
+                        if (copy[i+3] > 16) continue; // keep opaque
+                        let r=0,g=0,b=0,count=0;
+                        for (let oy=-1; oy<=1; ++oy) {
+                            for (let ox=-1; ox<=1; ++ox) {
+                                const nx = x+ox, ny = y+oy;
+                                if (nx<0||nx>=w||ny<0||ny>=h) continue;
+                                const ni = (ny*w + nx)*4;
+                                if (copy[ni+3] > 16) { r += copy[ni]; g += copy[ni+1]; b += copy[ni+2]; count++; }
+                            }
+                        }
+                        if (count>0) {
+                            arr[i] = Math.round(r/count);
+                            arr[i+1] = Math.round(g/count);
+                            arr[i+2] = Math.round(b/count);
+                            arr[i+3] = 255;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Nearest-neighbor hole fill: for each transparent pixel, search outward up to maxRadius
+        function fillHolesNearest(data, w, h, maxRadius) {
+            const arr = data.data;
+            const isOpaque = (idx) => arr[idx+3] > 16;
+            const getIdx = (x,y) => (y*w + x) * 4;
+            const copy = new Uint8ClampedArray(arr);
+            for (let y=0; y<h; ++y) {
+                for (let x=0; x<w; ++x) {
+                    const i = getIdx(x,y);
+                    if (copy[i+3] > 16) continue;
+                    let found = false;
+                    for (let r=1; r<=maxRadius && !found; ++r) {
+                        for (let oy=-r; oy<=r && !found; ++oy) {
+                            const ay = y + oy;
+                            if (ay < 0 || ay >= h) continue;
+                            const oxSpan = r;
+                            for (let ox=-oxSpan; ox<=oxSpan; ++ox) {
+                                const ax = x + ox;
+                                if (ax < 0 || ax >= w) continue;
+                                if (Math.abs(ox) !== r && Math.abs(oy) !== r) continue; // only perimeter
+                                const ni = getIdx(ax, ay);
+                                if (copy[ni+3] > 16) {
+                                    arr[i] = copy[ni];
+                                    arr[i+1] = copy[ni+1];
+                                    arr[i+2] = copy[ni+2];
+                                    arr[i+3] = 255;
+                                    found = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function init() {
+            dbg('init() starting');
+            const vsSource = document.getElementById('vs').textContent;
+            const fsSource = document.getElementById('fs').textContent;
+            const vShader = createShader(vsSource, gl.VERTEX_SHADER);
+            const fShader = createShader(fsSource, gl.FRAGMENT_SHADER);
+            program = gl.createProgram(); gl.attachShader(program, vShader); gl.attachShader(program, fShader); gl.linkProgram(program);
+            const linked = gl.getProgramParameter(program, gl.LINK_STATUS);
+            if (!linked) {
+                const info = gl.getProgramInfoLog(program);
+                console.error('Program link failed:', info);
+                dbg('Program link failed: ' + info);
+                program = null;
+                return;
+            }
+            gl.useProgram(program);
+            dbg('program linked and in use');
+
+            const vertices = new Float32Array([-1,-1,1,-1,-1,1,1,1]);
+            const buffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buffer); gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+            const position = gl.getAttribLocation(program, 'position'); gl.enableVertexAttribArray(position); gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+
+            texture = gl.createTexture(); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            const uTex = gl.getUniformLocation(program, 'uTexture');
+            if (uTex === null) { console.warn('uTexture uniform not found'); dbg('uTexture uniform not found'); }
+            gl.uniform1i(uTex, 0);
+            dbg('uTexture bound to unit 0');
+            // don't set uTexSize here (img may not be loaded yet) — will set after upload
+            const uTexSize = gl.getUniformLocation(program, 'uTexSize');
+        }
+
+        async function updateTextureFromImage(){
+            if(!texture) return;
+            dbg('uploading texture, img size: ' + img.width + 'x' + img.height);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            try{
+                    // Fetch the image as a blob and create an ImageBitmap to avoid tainting issues
+                    const resp = await fetch(img.src, { cache: 'no-cache' });
+                    if (!resp.ok) throw new Error('Image fetch failed: ' + resp.status);
+                    const blob = await resp.blob();
+                    // Create bitmap for safe canvas drawing
+                    if (window.createImageBitmap) {
+                        const bitmap = await createImageBitmap(blob);
+                        // Draw to offscreen canvas, run hole-filling, then upload cleaned canvas
+                        const t = document.createElement('canvas');
+                        t.width = bitmap.width;
+                        t.height = bitmap.height;
+                        const ctx = t.getContext('2d');
+                        ctx.drawImage(bitmap, 0, 0);
+
+                        // Hole-filling: replace transparent pixels by averaging non-transparent neighbors
+                        const imgData = ctx.getImageData(0,0,t.width,t.height);
+                        const w = t.width, h = t.height;
+                        // nearest-neighbor fill then a light smoothing pass
+                        fillHolesNearest(imgData, w, h, 8);
+                        fillHoles(imgData, w, h, 1);
+                        ctx.putImageData(imgData,0,0);
+                        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, t);
+                    } else {
+                        // Fallback: draw blob to canvas via an offscreen image and upload
+                        const t = document.createElement('canvas');
+                        const img2 = new Image();
+                        img2.src = URL.createObjectURL(blob);
+                        await new Promise((res, rej)=>{ img2.onload = ()=>{ t.width = img2.width; t.height = img2.height; const ctx = t.getContext('2d'); ctx.drawImage(img2,0,0); URL.revokeObjectURL(img2.src); res(); }; img2.onerror = rej; });
+                        // Attempt hole fill on fallback as well
+                        try {
+                            const ctx = t.getContext('2d');
+                                const imgData = ctx.getImageData(0,0,t.width,t.height);
+                                fillHolesNearest(imgData, t.width, t.height, 8);
+                                fillHoles(imgData, t.width, t.height, 1);
+                            ctx.putImageData(imgData,0,0);
+                        } catch(e) { /* ignore */ }
+                        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,t);
+                    }
+            }catch(e){
+                console.warn('texture upload failed, using fallback canvas', e);
+                dbg('texture upload failed: ' + e.message);
+                try{
+                    const t=document.createElement('canvas'); t.width=img.width; t.height=img.height; t.getContext('2d').drawImage(img,0,0); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,t);
+                }catch(err2){
+                    console.error('Fallback upload also failed', err2);
+                    dbg('Fallback upload also failed: ' + err2.message);
+                }
+            }
+            const err = gl.getError();
+            if (err !== gl.NO_ERROR) {
+                console.error('WebGL error after texImage2D:', err); dbg('WebGL error after texImage2D: ' + err);
+            } else {
+                dbg('texImage2D uploaded without GL error');
+                // hide fallback overlay when upload succeeds
+                if (fallbackOverlay) fallbackOverlay.style.display = 'none';
+            }
+        }
+
+        function resize(){ if(!img.width) return; const scale = Math.min(window.innerWidth/img.width, window.innerHeight/img.height)*0.85; canvas.width = Math.max(1,Math.floor(img.width*scale)); canvas.height = Math.max(1,Math.floor(img.height*scale)); gl.viewport(0,0,canvas.width,canvas.height); }
+
+        function updateMouse(e){ const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; mousePos.x = (clientX-rect.left)/rect.width; mousePos.y = (clientY-rect.top)/rect.height; }
+
+        canvas.addEventListener('mousedown', (e)=>{ isDragging=true; updateMouse(e); dragStartPos.x=mousePos.x; dragStartPos.y=mousePos.y; targetStrength=1.0; playDragSound(); });
+        window.addEventListener('mousemove', (e)=>{ if(isDragging) updateMouse(e); });
+        window.addEventListener('mouseup', ()=>{ if(!isDragging) return; isDragging=false; targetStrength=0; playReleaseSequence(); });
+
+        canvas.addEventListener('touchstart', (e)=>{ isDragging=true; updateMouse(e); dragStartPos.x=mousePos.x; dragStartPos.y=mousePos.y; targetStrength=1.0; playDragSound(); }, {passive:false});
+        window.addEventListener('touchmove', (e)=>{ if(isDragging){ updateMouse(e); e.preventDefault(); } }, {passive:false});
+        window.addEventListener('touchend', ()=>{ if(!isDragging) return; isDragging=false; targetStrength=0; playReleaseSequence(); });
+        window.addEventListener('resize', resize);
+
+        function render(){ const force = (targetStrength - strength) * springK; velocity += force; velocity *= damping; strength += velocity; gl.clearColor(1,1,1,1); gl.clear(gl.COLOR_BUFFER_BIT);
+            const uMouse = gl.getUniformLocation(program, 'uMouse');
+            const uDragStart = gl.getUniformLocation(program, 'uDragStart');
+            const uStrength = gl.getUniformLocation(program, 'uStrength');
+            const uAspect = gl.getUniformLocation(program, 'uAspect');
+            const uTime = gl.getUniformLocation(program, 'uTime');
+            const uVelocity = gl.getUniformLocation(program, 'uVelocity');
+            gl.uniform2f(uMouse, mousePos.x, mousePos.y);
+            gl.uniform2f(uDragStart, dragStartPos.x, dragStartPos.y);
+            gl.uniform1f(uStrength, strength);
+            gl.uniform1f(uAspect, canvas.width / canvas.height);
+            gl.uniform1f(uTime, (Date.now() - startTime) / 1000.0);
+            gl.uniform1f(uVelocity, Math.abs(velocity));
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            requestAnimationFrame(render);
+        }
+
+        img.onload = async ()=>{
+            dbg('img.onload fired');
+            init();
+            if (location.protocol === 'file:') {
+                dbg('Running from file:// — browsers block secure texture upload.');
+                dbg('Please serve the folder over HTTP, e.g. in PowerShell:');
+                dbg('  python -m http.server 8000');
+                // keep the fallback overlay visible and start render loop without WebGL texture
+                resize();
+                requestAnimationFrame(render);
+                dbg('render started (fallback overlay in use)');
+                return;
+            }
+            await updateTextureFromImage();
+            // now set uTexSize uniform
+            const uTexSizeLoc = gl.getUniformLocation(program, 'uTexSize');
+            if (uTexSizeLoc) gl.uniform2f(uTexSizeLoc, img.width || 1, img.height || 1);
+            resize();
+            requestAnimationFrame(render);
+            dbg('render started');
+        };
+
+        // distortion always on; no toggle
+    </script>
+</body>
+</html>

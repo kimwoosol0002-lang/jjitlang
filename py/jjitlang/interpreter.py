@@ -88,6 +88,23 @@ class Interpreter:
                     continue
                 i += 1
                 continue
+            matched = False
+            _KOREAN_OPS = [
+                ('10년동안 니가 나한테 뭔 피해를 입었어?', '=='),
+                ('20년동안 니가 나한테 뭔 피해를 입었어?', '!='),
+                ('30년동안 니가 나한테 뭔 피해를 입었어?', '>'),
+                ('40년동안 니가 나한테 뭔 피해를 입었어?', '<'),
+                ('50년동안 니가 나한테 뭔 피해를 입었어?', '>='),
+                ('60년동안 니가 나한테 뭔 피해를 입었어?', '<='),
+            ]
+            for phrase, op in _KOREAN_OPS:
+                if text[i:i+len(phrase)] == phrase:
+                    tokens.append(Token('OPERATOR', op))
+                    i += len(phrase)
+                    matched = True
+                    break
+            if matched:
+                continue
             if ch.isdigit():
                 start = i
                 i += 1

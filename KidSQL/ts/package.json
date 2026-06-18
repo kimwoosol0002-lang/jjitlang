@@ -1,0 +1,17 @@
+{
+  "name": "kidsql",
+  "version": "0.1.0",
+  "description": "SQL made so easy a kindergartner can use it.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "typescript": "^5.0.0"
+  }
+}
