@@ -1,9 +1,0 @@
-{
-  "name": "kidsql",
-  "version": "0.1.0",
-  "description": "SQL made so easy a kindergartner can use it.",
-  "main": "src/index.js",
-  "dependencies": {
-    "better-sqlite3": "^11.0.0"
-  }
-}
