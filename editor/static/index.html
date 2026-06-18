@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>찢랭 에디터</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Malgun Gothic',sans-serif;background:#1a1a2e;color:#eee;height:100vh;display:flex;flex-direction:column}
+.header{background:#16213e;padding:12px 20px;display:flex;align-items:center;gap:12px;border-bottom:2px solid #0f3460}
+.header h1{font-size:18px;color:#e94560}
+.header span{color:#888;font-size:13px}
+.btn{background:#e94560;color:#fff;border:none;padding:8px 20px;border-radius:4px;cursor:pointer;font-size:14px}
+.btn:hover{background:#c73650}
+.btn:active{transform:scale(0.97)}
+.btn-green{background:#1a8a4a}.btn-green:hover{background:#15703d}
+.controls{display:flex;gap:8px;margin-left:auto}
+.main{display:flex;flex:1;overflow:hidden}
+.panel{display:flex;flex-direction:column;flex:1}
+.panel-label{background:#0f3460;padding:6px 12px;font-size:12px;color:#aaa;display:flex;justify-content:space-between}
+.editor-wrap{flex:1;position:relative}
+#editor{width:100%;height:100%;background:#0d0d1a;color:#e0e0e0;border:none;outline:none;padding:16px;font-family:'D2Coding','Consolas','Courier New',monospace;font-size:14px;line-height:1.6;resize:none;tab-size:4}
+#editor::placeholder{color:#444}
+.output-wrap{flex:1;display:flex;flex-direction:column}
+#output{flex:1;background:#0d0d1a;padding:16px;font-family:'D2Coding','Consolas',monospace;font-size:14px;line-height:1.6;border:none;outline:none;resize:none;color:#ccc;overflow:auto;white-space:pre-wrap}
+#stdin{padding:8px 12px;background:#111128;border:1px solid #0f3460;color:#eee;font-family:monospace;font-size:13px;outline:none;width:100%}
+#stdin:focus{border-color:#e94560}
+.splitter{width:4px;background:#0f3460;cursor:col-resize;flex-shrink:0}
+.splitter:hover{background:#e94560}
+.status{background:#16213e;padding:6px 16px;font-size:12px;color:#666;display:flex;justify-content:space-between}
+.error{color:#e94560}
+.success{color:#1a8a4a}
+.line-count{position:absolute;left:0;top:0;padding:16px 8px;font-family:monospace;font-size:14px;line-height:1.6;color:#444;text-align:right;user-select:none;pointer-events:none}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>찢랭</h1>
+  <span>에디터 · 실행기</span>
+  <div class="controls">
+    <button class="btn btn-green" onclick="loadExample()">예제</button>
+    <button class="btn" onclick="run()">▶ 실행</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="panel">
+    <div class="panel-label">
+      <span>코드</span>
+      <span id="cursorPos">1:1</span>
+    </div>
+    <div class="editor-wrap">
+      <textarea id="editor" spellcheck="false" placeholder="야, 이 씨발련아&#10;  ...&#10;니 친정 엄마, 씹구멍 찢으면 좋겠니"></textarea>
+    </div>
+  </div>
+
+  <div class="splitter" id="splitter"></div>
+
+  <div class="panel">
+    <div class="panel-label">
+      <span>출력</span>
+      <span class="status-inner" id="statusLabel">준비</span>
+    </div>
+    <div class="output-wrap">
+      <div id="output"></div>
+      <input id="stdin" placeholder="표준 입력 (공백 구분)" />
+    </div>
+  </div>
+</div>
+
+<div class="status">
+  <span>Ctrl+Enter: 실행</span>
+  <span id="charCount">0자</span>
+</div>
+
+<script>
+const editor = document.getElementById('editor');
+const output = document.getElementById('output');
+const stdin = document.getElementById('stdin');
+const statusLabel = document.getElementById('statusLabel');
+const cursorPos = document.getElementById('cursorPos');
+const charCount = document.getElementById('charCount');
+
+editor.addEventListener('input', () => {
+  charCount.textContent = editor.value.length + '자';
+});
+
+editor.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    editor.value = editor.value.substring(0, start) + '    ' + editor.value.substring(end);
+    editor.selectionStart = editor.selectionEnd = start + 4;
+  }
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    run();
+  }
+});
+
+editor.addEventListener('click updatePos', updateCursorPos);
+editor.addEventListener('keyup', updateCursorPos);
+
+function updateCursorPos() {
+  const val = editor.value.substring(0, editor.selectionStart);
+  const line = val.split('\n').length;
+  const col = val.length - val.lastIndexOf('\n');
+  cursorPos.textContent = `${line}:${col}`;
+}
+
+const _START = '야, 이 씨발련아';
+const _END = '니 친정 엄마, 씹구멍 찢으면 좋겠니';
+
+async function run() {
+  const code = editor.value.trim();
+  if (!code) return;
+
+  if (!code.startsWith(_START)) {
+    output.textContent = '찢랭 코드는 "' + _START + '"로 시작해야 합니다';
+    output.className = 'error';
+    statusLabel.textContent = '오류';
+    statusLabel.className = 'status-inner error';
+    return;
+  }
+  if (!code.endsWith(_END)) {
+    output.textContent = '찢랭 코드는 "' + _END + '"로 끝나야 합니다';
+    output.className = 'error';
+    statusLabel.textContent = '오류';
+    statusLabel.className = 'status-inner error';
+    return;
+  }
+
+  statusLabel.textContent = '실행 중...';
+  statusLabel.className = 'status-inner';
+  output.textContent = '';
+  output.className = '';
+
+  const stdinVal = stdin.value.trim();
+
+  try {
+    const res = await fetch('/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ code, stdin: stdinVal }),
+    });
+    const data = await res.json();
+    let out = '';
+    if (data.stdout) out += data.stdout;
+    if (data.stderr) { out += '\n[오류] ' + data.stderr; output.className = 'error'; }
+    else { output.className = 'success'; }
+    output.textContent = out || '(출력 없음)';
+    if (data.returncode === 0) {
+      statusLabel.textContent = '완료';
+      statusLabel.className = 'status-inner success';
+    } else if (data.returncode === -1) {
+      statusLabel.textContent = '오류';
+      statusLabel.className = 'status-inner error';
+    } else {
+      statusLabel.textContent = '종료 코드 ' + data.returncode;
+      statusLabel.className = 'status-inner error';
+    }
+  } catch (e) {
+    output.textContent = '요청 실패: ' + e.message;
+    output.className = 'error';
+    statusLabel.textContent = '오류';
+    statusLabel.className = 'status-inner error';
+  }
+}
+
+const examples = [
+  {
+    name: 'Hello World',
+    code: '야, 이 씨발련아\n형수, 새끼, 1.\n1, 찢, 72.\n1, 메롱.\n1, 찢, 101.\n1, 메롱.\n1, 찢, 108.\n1, 메롱.\n1, 메롱.\n1, 찢, 111.\n1, 메롱.\n니 친정 엄마, 씹구멍 찢으면 좋겠니'
+  },
+  {
+    name: 'A+B',
+    code: '야, 이 씨발련아\n형수, 새끼, 1.\n형수, 새끼, 2.\n1, 찢, 놈.\n2, 찢, 놈.\n3, 찢, 1, 드럼통, 2.\n3, 불지른다.\n니 친정 엄마, 씹구멍 찢으면 좋겠니',
+    stdin: '3 5'
+  },
+  {
+    name: '사칙연산',
+    code: '야, 이 씨발련아\n형수, 새끼, 1.\n형수, 새끼, 2.\n1, 찢, 20.\n2, 찢, 7.\n3, 찢, 1, 드럼통, 2.\n3, 불지른다.\n4, 찢, 1, 죽일, 2.\n4, 불지른다.\n5, 찢, 1, 패륜아, 2.\n5, 불지른다.\n6, 찢, 1, 도련님, 2.\n6, 불지른다.\n7, 찢, 1, 또라이, 2.\n7, 불지른다.\n니 친정 엄마, 씹구멍 찢으면 좋겠니'
+  },
+  {
+    name: '비교 (if/else)',
+    code: '야, 이 씨발련아\n형수, 새끼, 1.\n1, 찢, 놈.\n미친년, 1 30년동안 니가 나한테 뭔 피해를 입었어? 0\n   1, 불지른다.\n병신\n   2, 찢, 0, 죽일, 1.\n   2, 불지른다.\n니 친정 엄마, 씹구멍 찢으면 좋겠니',
+    stdin: '-3'
+  },
+  {
+    name: '카운트다운',
+    code: '야, 이 씨발련아\n형수, 새끼, 1.\n형수, 새끼, 2.\n1, 찢, 놈.\n2, 찢, 1.\n지가 나온 구멍, 1 10년동안 니가 나한테 뭔 피해를 입었어? 0\n    1, 칼로 쑤신다.\n니 친정 엄마, 씹구멍 찢으면 좋겠니',
+    stdin: '5'
+  },
+];
+let exIdx = 0;
+function loadExample() {
+  const ex = examples[exIdx % examples.length];
+  exIdx++;
+  editor.value = ex.code;
+  charCount.textContent = ex.code.length + '자';
+  if (ex.stdin !== undefined) stdin.value = ex.stdin;
+  output.textContent = '';
+  output.className = '';
+  statusLabel.textContent = '예제 로드: ' + ex.name;
+  statusLabel.className = 'status-inner';
+}
+
+// Drag splitter
+const splitter = document.getElementById('splitter');
+let isDragging = false;
+splitter.addEventListener('mousedown', () => isDragging = true);
+document.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  const pct = (e.clientX / window.innerWidth) * 100;
+  if (pct > 20 && pct < 80) {
+    document.querySelectorAll('.panel')[0].style.flex = pct + '%';
+    document.querySelectorAll('.panel')[1].style.flex = (100 - pct) + '%';
+  }
+});
+document.addEventListener('mouseup', () => isDragging = false);
+
+document.addEventListener('DOMContentLoaded', () => loadExample());
+</script>
+</body>
+</html>
