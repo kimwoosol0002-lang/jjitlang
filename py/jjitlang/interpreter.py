@@ -77,17 +77,6 @@ class Interpreter:
                 tokens.append(Token('DOT'))
                 i += 1
                 continue
-            if ch in '><=!':
-                if i + 1 < len(text) and text[i:i+2] in ('>=', '<=', '==', '!='):
-                    tokens.append(Token('OPERATOR', text[i:i+2]))
-                    i += 2
-                    continue
-                if ch in '><':
-                    tokens.append(Token('OPERATOR', ch))
-                    i += 1
-                    continue
-                i += 1
-                continue
             matched = False
             _KOREAN_OPS = [
                 ('10년동안 니가 나한테 뭔 피해를 입었어?', '=='),
