@@ -1,5 +1,0 @@
-﻿py/**/__pycache__/
-py/build/
-py/*.egg-info/
-*.pyc
-__pycache__/
