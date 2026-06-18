@@ -1,4 +1,5 @@
 import sys
+import threading
 
 
 _KEYWORDS = {
@@ -47,9 +48,13 @@ def is_comment(stripped):
 
 
 class Interpreter:
-    def __init__(self):
+    def __init__(self, timeout=0):
         self.vars = {}
         self._input_queue = None
+        self._token_cache = {}
+        self._timeout = timeout
+        self._timed_out = False
+        self._timer = None
 
     def get_indent(self, line):
         return len(line) - len(line.lstrip())
@@ -62,6 +67,8 @@ class Interpreter:
         return [l[min_i:] for l in lines]
 
     def tokenize_line(self, text):
+        if text in self._token_cache:
+            return self._token_cache[text][:]
         tokens = []
         i = 0
         while i < len(text):
@@ -110,6 +117,7 @@ class Interpreter:
                     break
             if not matched:
                 raise InterpreterError(f'알 수 없는 토근: {text[i]} (위치 {i})')
+        self._token_cache[text] = tokens[:]
         return tokens
 
     def eval_val(self, raw):
@@ -152,6 +160,10 @@ class Interpreter:
         return False
 
     def run(self, code):
+        if self._timeout > 0:
+            self._timer = threading.Timer(self._timeout, self._timeout_hit)
+            self._timer.daemon = True
+            self._timer.start()
         raw_lines = code.split('\n')
         found_start = False
         found_end = False
@@ -172,11 +184,22 @@ class Interpreter:
             raise InterpreterError('시작 마커가 없음: ' + _START)
         if not found_end:
             raise InterpreterError('종료 마커가 없음: ' + _END)
-        self.exec_block(body_lines, 0)
+        try:
+            self.exec_block(body_lines, 0)
+        finally:
+            if self._timer:
+                self._timer.cancel()
+
+    def _timeout_hit(self):
+        self._timed_out = True
 
     def exec_block(self, lines, base_indent):
+        if self._timed_out:
+            raise InterpreterError(f'시간 초과 (제한 {self._timeout}초)')
         i = 0
         while i < len(lines):
+            if self._timed_out:
+                raise InterpreterError(f'시간 초과 (제한 {self._timeout}초)')
             line = lines[i]
             stripped = line.strip()
             if not stripped or is_comment(stripped):
@@ -233,6 +256,8 @@ class Interpreter:
                             break
                         body.append(lines[i])
                         i += 1
+                    if self._timed_out:
+                        raise InterpreterError(f'시간 초과 (제한 {self._timeout}초)')
                     if self.eval_cond(cond_tokens):
                         self.exec_block(self.strip_min_indent(body), 0)
                     elif has_else:
@@ -254,6 +279,8 @@ class Interpreter:
                         body.append(lines[i])
                         i += 1
                     while self.eval_cond(cond_tokens):
+                        if self._timed_out:
+                            raise InterpreterError(f'시간 초과 (제한 {self._timeout}초)')
                         self.exec_block(self.strip_min_indent(body), 0)
                     continue
 
@@ -367,12 +394,12 @@ class Interpreter:
             if var_name not in self.vars:
                 raise InterpreterError(f'변수 {var_name} 선언 안됨')
             self.vars[var_name] += 1
-            print(self.vars[var_name])
+            print(self.vars[var_name], flush=True)
 
         elif kw == '불지른다':
             if var_name not in self.vars:
                 raise InterpreterError(f'변수 {var_name} 선언 안됨')
-            print(self.vars[var_name])
+            print(self.vars[var_name], flush=True)
 
         elif kw == '메롱':
             if var_name not in self.vars:
@@ -393,13 +420,18 @@ class Interpreter:
 
 
 def main():
-    if len(sys.argv) < 2:
-        print('python -m jjitlang <file.jjit>')
+    timeout = 0
+    args = sys.argv[1:]
+    if args and args[0] == '--timeout' and len(args) >= 2:
+        timeout = float(args[1])
+        args = args[2:]
+    if not args:
+        print('python -m jjitlang [--timeout 초] <file.jjit>')
         sys.exit(1)
-    with open(sys.argv[1], encoding='utf-8') as f:
+    with open(args[0], encoding='utf-8') as f:
         code = f.read()
     try:
-        Interpreter().run(code)
+        Interpreter(timeout=timeout).run(code)
     except InterpreterError as e:
         print(f'오류: {e}', file=sys.stderr)
         sys.exit(1)

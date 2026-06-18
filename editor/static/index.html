@@ -40,6 +40,7 @@ body{font-family:'Malgun Gothic',sans-serif;background:#1a1a2e;color:#eee;height
   <div class="controls">
     <button class="btn btn-green" onclick="loadExample()">예제</button>
     <button class="btn" onclick="run()">▶ 실행</button>
+    <button class="btn" id="stopBtn" onclick="stop()" style="display:none">■ 중지</button>
   </div>
 </div>
 
@@ -80,6 +81,10 @@ const stdin = document.getElementById('stdin');
 const statusLabel = document.getElementById('statusLabel');
 const cursorPos = document.getElementById('cursorPos');
 const charCount = document.getElementById('charCount');
+const stopBtn = document.getElementById('stopBtn');
+
+let currentJobId = null;
+let eventSource = null;
 
 editor.addEventListener('input', () => {
   charCount.textContent = editor.value.length + '자';
@@ -113,10 +118,14 @@ async function run() {
   const code = editor.value.trim();
   if (!code) return;
 
+  if (eventSource) { eventSource.close(); eventSource = null; }
+  currentJobId = null;
+
   statusLabel.textContent = '실행 중...';
   statusLabel.className = 'status-inner';
   output.textContent = '';
   output.className = '';
+  stopBtn.style.display = 'inline-block';
 
   const stdinVal = stdin.value.trim();
 
@@ -127,25 +136,58 @@ async function run() {
       body: JSON.stringify({ code, stdin: stdinVal }),
     });
     const data = await res.json();
-    let out = '';
-    if (data.stdout) out += data.stdout;
-    if (data.stderr) { out += '\n[오류] ' + data.stderr; output.className = 'error'; }
-    else { output.className = 'success'; }
-    output.textContent = out || '(출력 없음)';
-    if (data.returncode === 0) {
-      statusLabel.textContent = '완료';
-      statusLabel.className = 'status-inner success';
-    } else if (data.returncode === -1) {
-      statusLabel.textContent = '오류';
+    currentJobId = data.job_id;
+
+    eventSource = new EventSource('/stream/' + currentJobId);
+    eventSource.onmessage = (evt) => {
+      const msg = JSON.parse(evt.data);
+      if (msg.type === 'stdout') {
+        output.textContent += msg.text;
+        output.scrollTop = output.scrollHeight;
+      } else if (msg.type === 'done') {
+        eventSource.close();
+        eventSource = null;
+        currentJobId = null;
+        stopBtn.style.display = 'none';
+        if (msg.returncode === 0) {
+          statusLabel.textContent = '완료';
+          statusLabel.className = 'status-inner success';
+        } else {
+          statusLabel.textContent = '종료 코드 ' + msg.returncode;
+          statusLabel.className = 'status-inner error';
+        }
+        if (!output.textContent.trim()) output.textContent = '(출력 없음)';
+      } else if (msg.type === 'error') {
+        output.textContent += '\n[오류] ' + msg.text;
+        output.className = 'error';
+      }
+    };
+    eventSource.onerror = () => {
+      eventSource.close();
+      eventSource = null;
+      currentJobId = null;
+      stopBtn.style.display = 'none';
+      statusLabel.textContent = '연결 종료';
       statusLabel.className = 'status-inner error';
-    } else {
-      statusLabel.textContent = '종료 코드 ' + data.returncode;
-      statusLabel.className = 'status-inner error';
-    }
+    };
   } catch (e) {
     output.textContent = '요청 실패: ' + e.message;
     output.className = 'error';
     statusLabel.textContent = '오류';
+    statusLabel.className = 'status-inner error';
+    stopBtn.style.display = 'none';
+  }
+}
+
+async function stop() {
+  if (currentJobId) {
+    try {
+      await fetch('/stop/' + currentJobId, { method: 'POST' });
+    } catch (e) {}
+    if (eventSource) { eventSource.close(); eventSource = null; }
+    currentJobId = null;
+    stopBtn.style.display = 'none';
+    statusLabel.textContent = '중지됨';
     statusLabel.className = 'status-inner error';
   }
 }
@@ -173,6 +215,16 @@ const examples = [
     name: '카운트다운',
     code: '야, 이 씨발련아\n형수, 새끼, 1.\n형수, 새끼, 2.\n1, 찢, 놈.\n2, 찢, 1.\n지가 나온 구멍, 1 10년동안 니가 나한테 뭔 피해를 입었어? 0\n    1, 칼로 쑤신다.\n니 친정 엄마, 씹구멍 찢으면 좋겠니',
     stdin: '5'
+  },
+  {
+    name: '팩토리얼',
+    code: '야, 이 씨발련아\n형수, 새끼, 1.\n형수, 새끼, 2.\n형수, 새끼, 3.\n형수, 새끼, 4.\n1, 찢, 놈.\n2, 찢, 1.\n3, 찢, 1.\n4, 찢, 1.\n지가 나온 구멍, 3 60년동안 니가 나한테 뭔 피해를 입었어? 1\n    2, 찢, 2, 패륜아, 3.\n    3, 찢, 3, 드럼통, 4.\n2, 불지른다.\n니 친정 엄마, 씹구멍 찢으면 좋겠니',
+    stdin: '5'
+  },
+  {
+    name: '피보나치',
+    code: '야, 이 씨발련아\n형수, 새끼, 1.\n형수, 새끼, 2.\n형수, 새끼, 3.\n형수, 새끼, 4.\n형수, 새끼, 5.\n형수, 새끼, 6.\n1, 찢, 놈.\n2, 찢, 0.\n3, 찢, 1.\n5, 찢, 3.\n6, 찢, 1.\n2, 불지른다.\n3, 불지른다.\n지가 나온 구멍, 5 60년동안 니가 나한테 뭔 피해를 입었어? 1\n    4, 찢, 2, 드럼통, 3.\n    2, 찢, 3.\n    3, 찢, 4.\n    3, 불지른다.\n    5, 찢, 5, 드럼통, 6.\n니 친정 엄마, 씹구멍 찢으면 좋겠니',
+    stdin: '10'
   },
 ];
 let exIdx = 0;
