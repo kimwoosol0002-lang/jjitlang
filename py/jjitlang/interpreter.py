@@ -142,14 +142,6 @@ class Interpreter:
             if matched:
                 continue
 
-            if ch.isdigit():
-                start = i
-                i += 1
-                while i < len(text) and text[i].isdigit():
-                    i += 1
-                tokens.append(Token('NUMBER', int(text[start:i])))
-                continue
-
             matched = False
             for kw in sorted(_KEYWORDS.keys(), key=len, reverse=True):
                 if i + len(kw) <= len(text) and text[i:i+len(kw)] == kw:
