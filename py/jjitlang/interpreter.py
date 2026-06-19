@@ -27,6 +27,26 @@ _KEYWORDS = {
     '공작금': 'CMP',
 }
 
+_KOREAN_NUMS = {
+    '일베': 0,
+    '야': 1,
+    '야이': 2,
+    '이': 3,
+    '야 씨발놈아': 4,
+    '이 씨발놈아': 5,
+    '야이 병신아': 6,
+    '야 병신아': 7,
+    '이 병신아': 8,
+    '오피스 누나': 9,
+    '일베 출신': 11,
+    '짝짝이눈': 12,
+    '정신지체아': 13,
+    '왜 자살': 14,
+    '기본소득': 15,
+    '베네수엘라': 16,
+    '날치기': 17,
+}
+
 _START = '야, 이 씨발련아'
 _END = '니 친정 엄마, 씹구멍 찢으면 좋겠니'
 
@@ -45,6 +65,16 @@ class InterpreterError(Exception):
 
 def is_comment(stripped):
     return stripped.startswith('#') or stripped.startswith('//')
+
+
+def korean_to_int(s):
+    s = s.strip()
+    try:
+        return int(s)
+    except ValueError:
+        if s in _KOREAN_NUMS:
+            return _KOREAN_NUMS[s]
+    return None
 
 
 class Interpreter:
@@ -101,6 +131,17 @@ class Interpreter:
                     break
             if matched:
                 continue
+
+            matched = False
+            for phrase, nv in sorted(_KOREAN_NUMS.items(), key=lambda x: -len(x[0])):
+                if text[i:i+len(phrase)] == phrase:
+                    tokens.append(Token('NUMBER', nv))
+                    i += len(phrase)
+                    matched = True
+                    break
+            if matched:
+                continue
+
             if ch.isdigit():
                 start = i
                 i += 1
@@ -108,6 +149,7 @@ class Interpreter:
                     i += 1
                 tokens.append(Token('NUMBER', int(text[start:i])))
                 continue
+
             matched = False
             for kw in sorted(_KEYWORDS.keys(), key=len, reverse=True):
                 if i + len(kw) <= len(text) and text[i:i+len(kw)] == kw:
@@ -383,10 +425,8 @@ class Interpreter:
                             for token in line.split():
                                 self._input_queue.append(token)
                     if self._input_queue:
-                        try:
-                            self.vars[var_name] = int(self._input_queue.pop(0))
-                        except ValueError:
-                            self.vars[var_name] = 0
+                        v = korean_to_int(self._input_queue.pop(0))
+                        self.vars[var_name] = v if v is not None else 0
                     else:
                         self.vars[var_name] = 0
 
